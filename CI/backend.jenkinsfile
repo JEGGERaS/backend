@@ -1,0 +1,97 @@
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+    }
+
+    tools {
+        maven 'MAVEN'
+    	jdk 'java-17'
+    }
+
+    environment {
+        GITHUB_API_URL = 'https://api.github.com'
+        GITHUB_REPO_OWNER = 'JEGGERaS'
+        GITHUB_REPO_NAME = 'backend'
+        GITHUB_CREDENTIALS_ID = 'JenkinsToken'
+    }
+
+    stages {
+
+        stage('Set GitHub Status to Pending') {
+            steps {
+                script {
+                    setBuildStatus('Jenkins CI (Pending...)', 'PENDING')
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    def repoURL = 'https://github.com/JEGGERaS/backend.git'
+
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "refs/heads/${BRANCH_NAME}"]],
+                        doGenerateSubmoduleConfigurations: false,
+                        extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'backend-clones']],
+                        userRemoteConfigs: [[url: repoURL]]
+                    ])
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('backend-clones') {
+                    sh 'mvn clean package'
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir('frontend-clones') {
+                    sh 'mvn test'
+                }
+            }
+        }
+
+        stage('Package') {
+            steps {
+                // Navigate to your Next.js project directory
+                dir('backend-clones') {
+                    // Build the Next.js project
+                    sh 'mvn package'
+                }
+            }
+        }
+    }
+
+post {
+    success {
+        setBuildStatus("Jenkins CI (Success)", "SUCCESS");
+    }
+    failure {
+        setBuildStatus("Jenkins CI (Failure)", "FAILURE");
+    }
+  }
+
+}
+
+def setBuildStatus(message, state){
+        def reposSource = [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/JEGGERaS/backend"]
+        def contextSource = [$class: "ManuallyEnteredCommitContextSource", context: "ci/jenkins/build-status"]
+        def errorHandlers = [[$class: "ChangingBuildStatusErrorHandler", result: "UNSTABLE"]]
+        def statusResultSource = [ $class: "ConditionalStatusResultSource", results: [[$class: "AnyBuildResult", message: message, state: state]] ]
+
+        step([
+            $class: "GitHubCommitStatusSetter",
+            reposSource: reposSource,
+            contextSource: contextSource,
+            errorHandlers: errorHandlers,
+            statusResultSource: statusResultSource
+        ]);
+    }
