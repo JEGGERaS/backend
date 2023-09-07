@@ -53,7 +53,7 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                dir('frontend-clones') {
+                dir('backend-clones') {
                     sh 'mvn test'
                 }
             }
